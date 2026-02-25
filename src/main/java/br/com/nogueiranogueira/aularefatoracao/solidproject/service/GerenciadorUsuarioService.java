@@ -6,33 +6,35 @@ import br.com.nogueiranogueira.aularefatoracao.solidproject.repository.UsuarioRe
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+
 @Service
 public class GerenciadorUsuarioService {
 
     @Autowired
     private UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private Map<String, CriacaoUsuarioRule> regras;
+
+    @Autowired
+    private UsuarioMailSenderService mailSenderService;
+
     public Usuario criarUsuario(UsuarioDTO dto) {
-        String tipo = dto.tipo();
+        validarEmail(dto.email());
+        validarIdade(dto.idade());
 
-        if ("COMUM".equals(tipo)) {
-            // Regras para usuário comum
-            validarEmail(dto.email());
-            Usuario usuario = new Usuario(dto.nome(), dto.email(), dto.tipo());
-            usuario.setPontos(0);
-            return usuarioRepository.save(usuario);
+        CriacaoUsuarioRule regra = regras.get(dto.tipo().toUpperCase());
 
-        } else if ("VIP".equals(tipo)) {
-            // Regras para usuário VIP
-            validarEmail(dto.email());
-            validarIdade(dto.idade());
-            Usuario usuario = new Usuario(dto.nome(), dto.email(), dto.tipo());
-            usuario.setPontos(100);
-            return usuarioRepository.save(usuario);
-
-        } else {
-            throw new IllegalArgumentException("Tipo inválido");
+        if (regra == null) {
+            throw new IllegalArgumentException("Tipo de usuário inválido: " + dto.tipo());
         }
+
+        Usuario usuario = regra.criar(dto);
+        Usuario usuarioSalvo = usuarioRepository.save(usuario);
+        mailSenderService.enviarEmailBoasVindas(usuarioSalvo.getEmail());
+
+        return usuarioSalvo;
     }
 
     private void validarEmail(String email) {
@@ -41,9 +43,13 @@ public class GerenciadorUsuarioService {
         }
     }
 
+
     private void validarIdade(int idade){
+
         if (idade < 18) {
+
             throw new IllegalArgumentException("Usuário deve ser maior de idade");
+
         }
     }
 }
